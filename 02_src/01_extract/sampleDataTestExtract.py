@@ -16,11 +16,11 @@ THIS_FILE = Path(__file__).resolve() # Locate the path of this file
 ROOT_DIR = THIS_FILE.parents[2] # Go up two levels to the root directory
 
 # Defining the data directories under the projects root directory
-RAW_DIR = ROOT_DIR / '01_data' / '01_raw'
-BRONZE_DIR = ROOT_DIR / '01_data' / '02_bronze'
+RAW_DIR = ROOT_DIR / '01_data' / '01_sampleData' / '01_raw'
+BRONZE_DIR = ROOT_DIR / '01_data' / '01_sampleData' / '02_bronze'
 LOG_DIR = ROOT_DIR / '06_logs'
 
-def download_one_quarter(year, quarter, output_dir='01_data/01_raw', extract_dir='01_data/02_bronze'):
+def download_one_quarter(year, quarter, output_dir='01_data/01_sampleData/01_raw', extract_dir='01_data/01_sampleData/02_bronze'):
     """
     Downloads a specific quarter's zip file to the raw directory from the SEC websiite and extracts it
     into the data/bronze directory.
