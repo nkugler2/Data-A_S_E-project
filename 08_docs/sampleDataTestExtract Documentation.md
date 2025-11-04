@@ -76,8 +76,8 @@ THIS_FILE = Path(__file__).resolve()
 ROOT_DIR = THIS_FILE.parents[2]
 
 
-RAW_DIR = ROOT_DIR / '01_data' / '01_raw'
-BRONZE_DIR = ROOT_DIR / '01_data' / '02_bronze'
+RAW_DIR = ROOT_DIR / '01_data' / '01_sampleData' / '01_raw'
+BRONZE_DIR = ROOT_DIR / '01_data' / '01_sampleData' / '02_bronze'
 LOG_DIR = ROOT_DIR / '06_logs'
 ```
 
