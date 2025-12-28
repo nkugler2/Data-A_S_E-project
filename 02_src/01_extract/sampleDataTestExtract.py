@@ -121,7 +121,7 @@ def download_one_quarter(year, quarter, output_dir='01_data/01_sampleData/01_raw
         if missing_files:
             print(f"⚠ Warning: Missing expected files: {missing_files}")
         else:
-            print(f"✓ All expected files extracted successfully")
+            print("✓ All expected files extracted successfully")
 
         extraction_end_time = datetime.now()
         extraction_time = extraction_end_time - extraction_start_time
