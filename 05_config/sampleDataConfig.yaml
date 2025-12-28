@@ -1,0 +1,70 @@
+# Sample Pipeline Configuration #
+## Config helps me use seperation of concerns ##
+## This means that I can change the pipeline in one place without having to change the code in multiple places ## 
+
+# Pipeline Configuration #
+## Helps me understand that this is the sample pipeline ##
+
+pipeline:
+  mode: "sample"  # vs. "full"
+  name: "SEC Financial Analytics - Sample Pipeline"
+  
+# Data Configuration #
+## Where I can indicate what quarters of data I want to process ##
+
+data:
+  quarters:
+    - "2025q1"
+    - "2025q2"
+  
+  # Data Paths #
+  ## Where I can indicate where the data will be stored ##
+
+  paths:
+    raw: "01_data/01_sampleData/01_raw"
+    bronze: "01_data/01_sampleData/02_bronze"
+    silver: "01_data/01_sampleData/03_silver"
+    gold: "01_data/01_sampleData/04_gold"
+    database: "01_data/01_sampleData/04_gold/secSampleData.duckdb"
+  
+
+  # Sample Companies #
+  ## Where I can indicate which companies I want to focus on ##
+
+  sample_companies:  # Optional: Focus on specific companies for deep dive
+    - 320193  # Apple Inc (CIK)
+    - 789019  # Microsoft Corp
+    - 1018724 # Amazon.com Inc
+    - 1326801 # Meta Platforms
+    - 1652044 # Alphabet Inc
+
+# Bronze Layer Configuration #
+## These thins I shouldn't have to change often ##
+
+bronze:
+  file_encoding: "utf-8"
+  delimiter: "\t"
+  line_ending: "\n"
+  
+# Silver Layer Configuration #
+## What metrics I want to focus on in my sample pipeline ##
+
+silver:
+  core_metrics:  # Focus on these tags for silver layer
+    - "Revenues"
+    - "NetIncomeLoss"
+    - "Assets"
+    - "Liabilities"
+    - "StockholdersEquity"
+    - "CashAndCashEquivalentsAtCarryingValue"
+    - "OperatingIncomeLoss"
+    - "CostOfRevenue"
+    
+# Gold Layer Configuration #
+## Sets rules for the analytics layer ##
+
+gold:
+  min_data_points: 2  # Minimum data points required for a company
+  calculate_ratios: true
+  reconstruct_statements: true
+
