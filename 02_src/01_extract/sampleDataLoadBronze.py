@@ -161,6 +161,25 @@ class BronzeLoader:
         total_source_records = len(df)
         load_timestamp = datetime.now()
 
+        # Track source data quality BEFORE conversion
+        source_null_counts = {}
+        for field in [
+            "adsh",
+            "cik",
+            "name",
+            "form",
+            "period",
+            "filed",
+            "accepted",
+            "sic",
+            "ein",
+            "fy",
+            "changed",
+            "fye",
+            "instance",
+        ]:
+            source_null_counts[field] = df[field].isna().sum()
+
         # Create or append to DuckDB table
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS bronze_sub (
@@ -259,10 +278,10 @@ class BronzeLoader:
                 TRY_CAST(changed AS DATE),
                 afs,
                 TRY_CAST(wksi AS BOOLEAN),
-                TRY_CAST(fye AS VARCHAR(4),
+                TRY_CAST(fye AS VARCHAR(4)),
                 form,
                 TRY_CAST(period AS DATE),
-                fy as INTEGER,
+                TRY_CAST(fy AS INTEGER),
                 fp,
                 TRY_CAST(filed AS DATE),
                 TRY_CAST(accepted AS TIMESTAMP),
@@ -277,6 +296,18 @@ class BronzeLoader:
                 TRY_CAST(load_timestamp AS TIMESTAMP)
             FROM sub_df
         """)
+
+        # This is error handling for the insert, should say
+        # what the actual aerror preventing the insert is
+        try:
+            self.conn.execute("""
+                INSERT INTO bronze_sub
+                ...
+            """)
+            print(f"  ✓ Insert succeeded, inserted {len(df)} rows")
+        except Exception as e:
+            print(f"  ✗ Insert failed: {e}")
+            raise
 
         self.conn.unregister("sub_df")
 
@@ -307,8 +338,8 @@ class BronzeLoader:
             load_timestamp=load_timestamp,
             quality_checks=quality_checks,
             total_records=total_source_records,
+            source_null_counts=source_null_counts,
         )
-
         print(f"  ✓ Loaded {total_source_records:,} submissions from sub.txt")
 
     # TO DO
@@ -446,6 +477,142 @@ class BronzeLoader:
     ##################################################################################################################
     # Step 8: Log Data Quality Metrics
     ##################################################################################################################
+    def _log_data_quality(
+        self,
+        table_name: str,
+        quarter: str,
+        load_timestamp: datetime,
+        quality_checks: list,
+        total_records: int,
+        source_null_counts: dict,
+    ):
+        """
+        Logs data quality metrics for the specified table
+
+        This method handles two types of checks:
+        1. null_check: Verifies required fields have no NULL values
+        2. type_conversion: Detects if TRY_CAST operations failed during data load
+
+        Type conversion failures are detected by comparing NULL counts before and after conversion.
+        If the target table has more NULLs than the source, those are conversion failures.
+
+        Args:
+            table_name: Name of the bronze table being checked
+            quarter: Data quarter being processed
+            load_timestamp: Timestamp of the load operation
+            quality_checks: List of tuples (check_category, check_type, field_name, severity)
+            total_records: Total number of records in source data
+            source_null_counts: Dictionary of NULL counts from source data before conversion
+        """
+        failed_checks = []
+
+        for check_category, check_type, field_name, severity in quality_checks:
+            if check_category == "null_check":
+                # For null checks, count NULLs in the target table
+                result = self.conn.execute(
+                    f"""
+                    SELECT
+                        COUNT(*) as total_records,
+                        SUM(CASE WHEN {field_name} IS NULL THEN 1 ELSE 0 END) as null_count
+                    FROM {table_name}
+                    WHERE data_quarter = ?
+                    """,
+                    [quarter],
+                ).fetchone()
+
+                total = result[0] if result else 0
+                issue_count = result[1] if result else 0
+                error_details = (
+                    f"{issue_count} NULL values found in {field_name}"
+                    if issue_count > 0
+                    else None
+                )
+
+            elif check_category == "type_conversion":
+                # For type conversion checks, compare source NULLs vs target NULLs
+                # If target has MORE nulls than source, those are conversion failures
+
+                source_nulls = source_null_counts.get(field_name, 0)
+
+                result = self.conn.execute(
+                    f"""
+                    SELECT
+                        COUNT(*) as total_records,
+                        SUM(CASE WHEN {field_name} IS NULL THEN 1 ELSE 0 END) as null_count
+                    FROM {table_name}
+                    WHERE data_quarter = ?
+                    """,
+                    [quarter],
+                ).fetchone()
+
+                total = result[0] if result else 0
+                target_nulls = result[1] if result else 0
+
+                # Conversion failures = target NULLs - source NULLs
+                # (New NULLs that appeared after TRY_CAST failed)
+                issue_count = max(0, target_nulls - source_nulls)
+
+                if issue_count > 0:
+                    error_details = (
+                        f"{issue_count} {check_type.replace('_', ' ')} failures in {field_name} "
+                        f"(source NULLs: {source_nulls}, target NULLs: {target_nulls})"
+                    )
+                else:
+                    error_details = None
+
+            else:
+                # Unknown check category - skip
+                continue
+
+            # Calculate issue percentage
+            issue_percentage = (issue_count / total * 100) if total > 0 else 0
+
+            # Determine if check passed based on severity
+            # CRITICAL: Must have zero issues
+            # WARNING: Can have up to 5% issues
+            if severity == "CRITICAL":
+                check_passed = issue_count == 0
+            else:
+                check_passed = issue_percentage < 5.0
+
+            # Insert into quality log
+            self.conn.execute(
+                """
+                INSERT INTO data_quality_log (
+                    table_name, data_quarter, load_timestamp,
+                    check_category, check_type, field_name,
+                    issue_count, total_records, issue_percentage,
+                    check_passed, severity, error_details
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    table_name,
+                    quarter,
+                    load_timestamp,
+                    check_category,
+                    check_type,
+                    field_name,
+                    issue_count,
+                    total,
+                    total_records,
+                    round(issue_percentage, 2),
+                    check_passed,
+                    severity,
+                    error_details,
+                ],
+            )
+
+            # Track failed checks for reporting
+            if not check_passed:
+                failed_checks.append((field_name, severity, issue_count, error_details))
+
+        # Print warnings if there are failures
+        if failed_checks:
+            print("  ⚠️  Data quality issues detected:")
+            for field, sev, count, details in failed_checks:
+                print(f"      [{sev}] {field}: {count} issues - {details}")
+        else:
+            print("  ✓ All data quality checks passed")
 
     ##################################################################################################################
     # Step 9: Create indexes
@@ -471,25 +638,25 @@ class BronzeLoader:
         """Get summary statistics of loaded data"""
         stats = {}
 
-        stats["submissions"] = self.conn.execute(
-            "SELECT COUNT(*) FROM bronze_sub"
-        ).fetchone()[0]
+        result = self.conn.execute("SELECT COUNT(*) FROM bronze_sub").fetchone()
+        stats["submissions"] = result[0] if result else 0
 
-        stats["companies"] = self.conn.execute(
+        result = self.conn.execute(
             "SELECT COUNT(DISTINCT cik) FROM bronze_sub"
-        ).fetchone()[0]
+        ).fetchone()
+        stats["companies"] = result[0] if result else 0
 
-        stats["numeric_facts"] = self.conn.execute(
-            "SELECT COUNT(*) FROM bronze_num"
-        ).fetchone()[0]
+        # stats["numeric_facts"] = self.conn.execute(
+        #     "SELECT COUNT(*) FROM bronze_num"
+        # ).fetchone()[0]
 
-        stats["unique_tags"] = self.conn.execute(
-            "SELECT COUNT(DISTINCT tag) FROM bronze_num"
-        ).fetchone()[0]
+        # stats["unique_tags"] = self.conn.execute(
+        #     "SELECT COUNT(DISTINCT tag) FROM bronze_num"
+        # ).fetchone()[0]
 
-        stats["presentation_rows"] = self.conn.execute(
-            "SELECT COUNT(*) FROM bronze_pre"
-        ).fetchone()[0]
+        # stats["presentation_rows"] = self.conn.execute(
+        #     "SELECT COUNT(*) FROM bronze_pre"
+        # ).fetchone()[0]
 
         return stats
 
