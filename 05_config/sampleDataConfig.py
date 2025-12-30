@@ -52,3 +52,8 @@ class Config:
     @property
     def quarters(self) -> list:
         return self.config['data']['quarters']
+    
+    # Gets the files to load for the bronze layer #
+    @property
+    def bronze_files_to_load(self) -> list:
+        return self.config.get('bronze', {}).get('files_to_load', ['sub.txt', 'num.txt', 'tag.txt', 'pre.txt'])

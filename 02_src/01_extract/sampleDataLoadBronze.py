@@ -110,15 +110,22 @@ class BronzeLoader:
         ## quarter is defined at the end of the function, and grabs each quarter from `quarters` in my configuration file ##
         quarter_path = self.config.bronze_path / quarter
 
-        # Load each file type
-        self._load_sub(
-            quarter_path, quarter
-        )  # This is where I load the submission data #
-        self._load_num(quarter_path, quarter)  # This is where I load the numeric data #
-        self._load_tag(quarter_path, quarter)  # This is where I load the tag data #
-        self._load_pre(
-            quarter_path, quarter
-        )  # This is where I load the presentation data #
+        # Load each file type based on configuration
+        ## Get the list of files to load from the configuration file ##
+        files_to_load = self.config.bronze_files_to_load
+        
+        if "sub.txt" in files_to_load:
+            self._load_sub(
+                quarter_path, quarter
+            )  # This is where I load the submission data #
+        if "num.txt" in files_to_load:
+            self._load_num(quarter_path, quarter)  # This is where I load the numeric data #
+        if "tag.txt" in files_to_load:
+            self._load_tag(quarter_path, quarter)  # This is where I load the tag data #
+        if "pre.txt" in files_to_load:
+            self._load_pre(
+                quarter_path, quarter
+            )  # This is where I load the presentation data #
 
         # Used for logging in the terminal #
         print(f"✓ {quarter} loaded successfully")
@@ -296,18 +303,6 @@ class BronzeLoader:
                 TRY_CAST(load_timestamp AS TIMESTAMP)
             FROM sub_df
         """)
-
-        # This is error handling for the insert, should say
-        # what the actual aerror preventing the insert is
-        try:
-            self.conn.execute("""
-                INSERT INTO bronze_sub
-                ...
-            """)
-            print(f"  ✓ Insert succeeded, inserted {len(df)} rows")
-        except Exception as e:
-            print(f"  ✗ Insert failed: {e}")
-            raise
 
         self.conn.unregister("sub_df")
 
