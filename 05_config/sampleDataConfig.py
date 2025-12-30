@@ -6,54 +6,86 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any
 
+
 class Config:
     """Configuration manager for SEC pipeline"""
-    
+
     ## This is where I load the configuration file ##
     def __init__(self, config_path: str = "05_config/sampleDataConfig.yaml"):
         """Initializes the configuration manager"""
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path).resolve()
+        # Determine project root: if config is in 05_config/, project root is parent of 05_config
+        # Navigate up from the config file to find the project root
+        current = self.config_path
+        # Walk up the directory tree to find the project root (parent of 05_config)
+        while current.parent != current:  # Stop at filesystem root
+            if current.name == "05_config":
+                self.project_root = current.parent
+                break
+            current = current.parent
+        else:
+            # Fallback: if we didn't find 05_config, assume config is relative to project root
+            # Go up two levels from config file (05_config/sampleDataConfig.yaml -> project root)
+            self.project_root = self.config_path.parent.parent
         self.config = self._load_config()
-        
+
     ## This is where I load the configuration file ##
     def _load_config(self) -> Dict[str, Any]:
         """Load YAML configuration"""
-        with open(self.config_path, 'r') as f:
-            return yaml.safe_load(f) # Safe load to avoid security issues
-    
+        with open(self.config_path, "r") as f:
+            return yaml.safe_load(f)  # Safe load to avoid security issues
+
     # Properties for the configuration #
 
     # Checks if the pipeline is in sample mode #
     @property
     def is_sample_mode(self) -> bool:
-        return self.config['pipeline']['mode'] == 'sample'
-    
+        return self.config["pipeline"]["mode"] == "sample"
+
     # Gets the path for the bronze layer #
     @property
     def bronze_path(self) -> Path:
-        return Path(self.config['data']['paths']['bronze'])
-    
+        return self.project_root / self.config["data"]["paths"]["bronze"]
+
     # Gets the path for the silver layer #
     @property
     def silver_path(self) -> Path:
-        return Path(self.config['data']['paths']['silver'])
-    
+        return self.project_root / self.config["data"]["paths"]["silver"]
+
     # Gets the path for the gold layer #
     @property
     def gold_path(self) -> Path:
-        return Path(self.config['data']['paths']['gold'])
-    
-    # Gets the path for the database #
+        return self.project_root / self.config["data"]["paths"]["gold"]
+
+    # Gets the path for the bronze database #
+    @property
+    def bronze_database_path(self) -> Path:
+        return self.project_root / self.config["data"]["paths"]["databases"]["bronze"]
+
+    # Gets the path for the silver database #
+    @property
+    def silver_database_path(self) -> Path:
+        return self.project_root / self.config["data"]["paths"]["databases"]["silver"]
+
+    # Gets the path for the gold database #
+    @property
+    def gold_database_path(self) -> Path:
+        return self.project_root / self.config["data"]["paths"]["databases"]["gold"]
+
+    # Backward compatibility: database_path points to bronze database #
     @property
     def database_path(self) -> Path:
-        return Path(self.config['data']['paths']['database'])
-    
+        return self.bronze_database_path
+
     # Gets the quarters for the data #
     @property
     def quarters(self) -> list:
-        return self.config['data']['quarters']
-    
+        return self.config["data"]["quarters"]
+
     # Gets the files to load for the bronze layer #
     @property
     def bronze_files_to_load(self) -> list:
-        return self.config.get('bronze', {}).get('files_to_load', ['sub.txt', 'num.txt', 'tag.txt', 'pre.txt'])
+        return self.config.get("bronze", {}).get(
+            "files_to_load", ["sub.txt", "num.txt", "tag.txt", "pre.txt"]
+        )
+

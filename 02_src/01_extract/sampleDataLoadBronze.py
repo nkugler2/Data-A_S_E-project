@@ -49,8 +49,12 @@ class BronzeLoader:
         # Assign the configuration file to the config variable #
         self.config = config
 
-        # Connect to the database #
-        self.conn = duckdb.connect(str(config.database_path))
+        # Ensure the database directory exists #
+        bronze_db_path = config.bronze_database_path
+        bronze_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Connect to the bronze database #
+        self.conn = duckdb.connect(str(bronze_db_path))
 
         # Initialize data quality infrastructure
         self._initialize_data_quality_infrastructure()
@@ -662,7 +666,10 @@ class BronzeLoader:
 
 # Usage script
 if __name__ == "__main__":
-    config = Config("05_config/sampleDataConfig.yaml")
+    # Get the project root directory (same as config_path resolution at top of file)
+    project_root = Path(__file__).parent.parent.parent
+    config_yaml_path = project_root / "05_config" / "sampleDataConfig.yaml"
+    config = Config(str(config_yaml_path))
     loader = BronzeLoader(config)
 
     # Load all configured quarters
