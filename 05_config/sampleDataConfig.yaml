@@ -25,7 +25,7 @@ data:
     silver: "01_data/01_sampleData/03_silver"
     gold: "01_data/01_sampleData/04_gold"
     databases:
-      bronze: "01_data/01_sampleData/_02_bronze/secSampleData_bronze.duckdb"
+      bronze: "01_data/01_sampleData/02_bronze/secSampleData_bronze.duckdb"
       silver: "01_data/01_sampleData/03_silver/secSampleData_silver.duckdb"
       gold: "01_data/01_sampleData/04_gold/secSampleData_gold.duckdb"
 
