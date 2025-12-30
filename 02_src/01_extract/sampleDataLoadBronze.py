@@ -117,13 +117,15 @@ class BronzeLoader:
         # Load each file type based on configuration
         ## Get the list of files to load from the configuration file ##
         files_to_load = self.config.bronze_files_to_load
-        
+
         if "sub.txt" in files_to_load:
             self._load_sub(
                 quarter_path, quarter
             )  # This is where I load the submission data #
         if "num.txt" in files_to_load:
-            self._load_num(quarter_path, quarter)  # This is where I load the numeric data #
+            self._load_num(
+                quarter_path, quarter
+            )  # This is where I load the numeric data #
         if "tag.txt" in files_to_load:
             self._load_tag(quarter_path, quarter)  # This is where I load the tag data #
         if "pre.txt" in files_to_load:
@@ -189,7 +191,7 @@ class BronzeLoader:
             "fye",
             "instance",
         ]:
-            source_null_counts[field] = df[field].isna().sum()
+            source_null_counts[field] = int(df[field].isna().sum())
 
         # Create or append to DuckDB table
         self.conn.execute("""
@@ -235,12 +237,12 @@ class BronzeLoader:
                 form VARCHAR(10) NOT NULL,
 
                 -- Period Information --
-                period DATE NOT NULL,
+                period DATE,
                 fy INTEGER,
                 fp VARCHAR(2),
 
                 -- Filing Dates -- 
-                filed DATE NOT NULL,
+                filed DATE,
                 accepted TIMESTAMP NOT NULL,
 
                 -- Additional flags --
@@ -519,8 +521,8 @@ class BronzeLoader:
                     [quarter],
                 ).fetchone()
 
-                total = result[0] if result else 0
-                issue_count = result[1] if result else 0
+                total = int(result[0]) if result else 0
+                issue_count = int(result[1]) if result else 0
                 error_details = (
                     f"{issue_count} NULL values found in {field_name}"
                     if issue_count > 0
@@ -544,12 +546,12 @@ class BronzeLoader:
                     [quarter],
                 ).fetchone()
 
-                total = result[0] if result else 0
-                target_nulls = result[1] if result else 0
+                total = int(result[0]) if result else 0
+                target_nulls = int(result[1]) if result else 0
 
                 # Conversion failures = target NULLs - source NULLs
                 # (New NULLs that appeared after TRY_CAST failed)
-                issue_count = max(0, target_nulls - source_nulls)
+                issue_count = max(0, int(target_nulls) - int(source_nulls))
 
                 if issue_count > 0:
                     error_details = (
@@ -564,7 +566,7 @@ class BronzeLoader:
                 continue
 
             # Calculate issue percentage
-            issue_percentage = (issue_count / total * 100) if total > 0 else 0
+            issue_percentage = float(issue_count / total * 100) if total > 0 else 0
 
             # Determine if check passed based on severity
             # CRITICAL: Must have zero issues
@@ -591,10 +593,9 @@ class BronzeLoader:
                     check_category,
                     check_type,
                     field_name,
-                    issue_count,
-                    total,
-                    total_records,
-                    round(issue_percentage, 2),
+                    int(issue_count),
+                    int(total_records),
+                    float(round(issue_percentage, 2)),
                     check_passed,
                     severity,
                     error_details,
@@ -625,10 +626,10 @@ class BronzeLoader:
         # Key indexes for joins
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sub_adsh ON bronze_sub(adsh)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sub_cik ON bronze_sub(cik)")
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_adsh ON bronze_num(adsh)")
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_tag ON bronze_num(tag)")
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_adsh ON bronze_pre(adsh)")
-        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_stmt ON bronze_pre(stmt)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_adsh ON bronze_num(adsh)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_tag ON bronze_num(tag)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_adsh ON bronze_pre(adsh)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_stmt ON bronze_pre(stmt)")
 
         print("✓ Indexes created")
 
@@ -636,7 +637,6 @@ class BronzeLoader:
     def get_summary_stats(self):
         """Get summary statistics of loaded data"""
         stats = {}
-
         result = self.conn.execute("SELECT COUNT(*) FROM bronze_sub").fetchone()
         stats["submissions"] = result[0] if result else 0
 
@@ -686,9 +686,9 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"Submissions:      {stats['submissions']:,}")
     print(f"Unique Companies: {stats['companies']:,}")
-    print(f"Numeric Facts:    {stats['numeric_facts']:,}")
-    print(f"Unique Tags:      {stats['unique_tags']:,}")
-    print(f"Presentation Rows: {stats['presentation_rows']:,}")
+    # print(f"Numeric Facts:    {stats['numeric_facts']:,}")
+    # print(f"Unique Tags:      {stats['unique_tags']:,}")
+    # print(f"Presentation Rows: {stats['presentation_rows']:,}")
     print("=" * 50)
 
     loader.close()
