@@ -18,7 +18,4 @@ project_root/
 ├── 06_logs/              # Pipeline logs
 ├── 07_sql/               # Has my SQL code
 └── 08_docs/              # Has my documentation that is not in Obsidian
-
-
 ```
-
