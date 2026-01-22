@@ -288,15 +288,15 @@ class BronzeLoader:
                 stprinc,
                 TRY_CAST(ein AS INTEGER),
                 former,
-                TRY_CAST(changed AS DATE),
+                TRY_STRPTIME(changed, '%Y%m%d')::DATE,
                 afs,
                 TRY_CAST(wksi AS BOOLEAN),
                 TRY_CAST(fye AS VARCHAR(4)),
                 form,
-                TRY_CAST(period AS DATE),
+                TRY_STRPTIME(period, '%Y%m%d')::DATE,
                 TRY_CAST(fy AS INTEGER),
                 fp,
-                TRY_CAST(filed AS DATE),
+                TRY_STRPTIME(filed, '%Y%m%d')::DATE,
                 TRY_CAST(accepted AS TIMESTAMP),
                 TRY_CAST(prevrpt AS BOOLEAN),
                 TRY_CAST(detail AS BOOLEAN),
@@ -342,12 +342,6 @@ class BronzeLoader:
             source_null_counts=source_null_counts,
         )
         print(f"  ✓ Loaded {total_source_records:,} submissions from sub.txt")
-
-    # TO DO
-    # 1. Ensure that the quality checks here account for all issues
-    #    - Critical issues should be when it is supposed to be NOT NULL
-    #    - Warning issues should be things that would be nice to have but are not crucial data that i need
-    # 2. Change the DATE() things in my schema to either DATE alone for year/month/day or just integer for yyyy or mmdd
 
     ##################################################################################################################
     # Step 5: Load numeric facts data

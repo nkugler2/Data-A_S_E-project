@@ -23,3 +23,5 @@ Thumbs.db
 *.htm
 01_data/**/*.txt
 
+# Marimo
+__marimo__
