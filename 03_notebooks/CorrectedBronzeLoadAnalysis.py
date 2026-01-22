@@ -44,6 +44,28 @@ def _():
 
 
 @app.cell
+def _(bronze_sub, engine, mo):
+    _df = mo.sql(
+        f"""
+        Select * from bronze_sub
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(data_quality_log, engine, mo):
+    _df = mo.sql(
+        f"""
+        select * from data_quality_log
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     ## Verify Date Fields Are Correctly Loaded

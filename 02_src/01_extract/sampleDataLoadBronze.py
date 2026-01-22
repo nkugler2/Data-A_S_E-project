@@ -190,6 +190,11 @@ class BronzeLoader:
             "changed",
             "fye",
             "instance",
+            "detail",
+            "wksi",
+            "prevrpt",
+            "accepted",
+            "nciks",
         ]:
             source_null_counts[field] = int(df[field].isna().sum())
 
@@ -317,8 +322,14 @@ class BronzeLoader:
             ("null_check", "required_field", "adsh", "CRITICAL"),
             ("null_check", "required_field", "cik", "CRITICAL"),
             ("null_check", "required_field", "name", "CRITICAL"),
+            ("null_check", "required_field", "wksi", "CRITICAL"),
             ("null_check", "required_field", "form", "CRITICAL"),
+            ("null_check", "required_field", "period", "CRITICAL"),
+            ("null_check", "required_field", "filed", "CRITICAL"),
+            ("null_check", "required_field", "accepted", "CRITICAL"),
+            ("null_check", "required_field", "prevrpt", "CRITICAL"),
             ("null_check", "required_field", "instance", "CRITICAL"),
+            ("null_check", "required_field", "nciks", "CRITICAL"),
             ("type_conversion", "integer_conversion", "cik", "CRITICAL"),
             ("type_conversion", "integer_conversion", "sic", "WARNING"),
             ("type_conversion", "integer_conversion", "ein", "WARNING"),
