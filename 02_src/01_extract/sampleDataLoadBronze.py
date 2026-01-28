@@ -671,18 +671,16 @@ class BronzeLoader:
 
 # Usage script
 if __name__ == "__main__":
-    # Get the project root directory (same as config_path resolution at top of file)
-    project_root = Path(__file__).parent.parent.parent
-    config_yaml_path = project_root / "05_config" / "sampleDataConfig.yaml"
+    # Derive YAML config path from the Python config path (replace .py with .yaml)
+    config_yaml_path = config_path.with_suffix(".yaml")
     config = Config(str(config_yaml_path))
     loader = BronzeLoader(config)
+    # Create indexes
+    # loader.create_indexes()
 
     # Load all configured quarters
     for quarter in config.quarters:
         loader.load_quarter(quarter)
-
-    # Create indexes
-    loader.create_indexes()
 
     # Print summary
     stats = loader.get_summary_stats()
