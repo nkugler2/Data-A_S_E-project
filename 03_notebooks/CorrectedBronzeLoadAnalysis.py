@@ -40,6 +40,25 @@ def _(bronze_sub, engine, mo):
 @app.cell
 def _(mo):
     mo.md(r"""
+    ## Bronze_num
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    _df = mo.sql(
+        f"""
+        select * from bronze_num limit 100
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
     ## Data_quality_log
     """)
     return
@@ -383,6 +402,523 @@ def _(bronze_sub, engine, mo):
         FROM bronze_sub
         GROUP BY form
         ORDER BY count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # EDA of Bronze_tag
+
+    tag.txt is a reference/dimension table — one row per unique (tag, version) concept.
+    Key columns:
+    - **tag / version**: XBRL concept name and taxonomy (e.g., us-gaap/2024)
+    - **custom**: 1 = company-defined tag, 0 = standard taxonomy tag
+    - **abstract**: 1 = grouping label only (no value attached), 0 = reportable fact
+    - **datatype**: value type (monetary, shares, string, etc.) — NULL for abstract tags
+    - **iord**: I = instant (point-in-time), D = duration — NULL for abstract tags
+    - **crdr**: C = credit-normal, D = debit-normal — NULL for non-monetary tags
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Bronze_tag Table Overview
+    """)
+    return
+
+
+@app.cell
+def _(bronze_tag, engine, mo):
+    bronze_tag_summary = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_tags,
+            COUNT(DISTINCT tag) as unique_tag_names,
+            COUNT(DISTINCT version) as unique_versions,
+            SUM(CASE WHEN custom THEN 1 ELSE 0 END) as custom_tags,
+            SUM(CASE WHEN abstract THEN 1 ELSE 0 END) as abstract_tags,
+            SUM(CASE WHEN NOT abstract AND datatype IS NULL THEN 1 ELSE 0 END) as non_abstract_missing_datatype
+        FROM bronze_tag
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Datatype Distribution
+    """)
+    return
+
+
+@app.cell
+def _(bronze_tag, engine, mo):
+    tag_datatype_dist = mo.sql(
+        f"""
+        SELECT
+            datatype,
+            COUNT(*) as tag_count,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct_of_total
+        FROM bronze_tag
+        GROUP BY datatype
+        ORDER BY tag_count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Credit/Debit Distribution
+    """)
+    return
+
+
+@app.cell
+def _(bronze_tag, engine, mo):
+    tag_crdr_dist = mo.sql(
+        f"""
+        SELECT
+            crdr,
+            COUNT(*) as tag_count
+        FROM bronze_tag
+        GROUP BY crdr
+        ORDER BY tag_count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Data Quality Log — bronze_tag
+    """)
+    return
+
+
+@app.cell
+def _(engine, mo):
+    tag_quality_log = mo.sql(
+        f"""
+        SELECT
+            field_name,
+            check_category,
+            check_type,
+            severity,
+            issue_count,
+            total_records,
+            issue_percentage,
+            check_passed,
+            error_details
+        FROM data_quality_log
+        WHERE table_name = 'bronze_tag'
+        ORDER BY severity DESC, issue_count DESC
+        """,
+        engine=engine
+    )
+    return (tag_quality_log,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # EDA of Bronze_pre
+
+    pre.txt is the presentation linkbase — it maps each filing's financial statements to their
+    display structure (which tags appear in which statement, in what order).
+    Key columns:
+    - **adsh**: accession number — ties back to bronze_sub
+    - **report**: report number within the filing
+    - **line**: line number within the report
+    - **stmt**: statement type — BS (balance sheet), IS (income), CF (cash flow), EQ (equity), CI (comprehensive income), UN (unlabeled)
+    - **inpth**: displayed in parentheses (negative presentation)
+    - **rfile**: R = XBRL report, H = HTML report
+    - **tag / version**: the XBRL concept — ties back to bronze_tag
+    - **negating**: whether to flip the sign for display
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Bronze_pre Table Overview
+    """)
+    return
+
+
+@app.cell
+def _(bronze_pre, engine, mo):
+    bronze_pre_summary = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_rows,
+            COUNT(DISTINCT adsh) as unique_filings,
+            COUNT(DISTINCT stmt) as unique_stmt_types,
+            COUNT(DISTINCT tag) as unique_tags,
+            MIN(report) as min_report,
+            MAX(report) as max_report
+        FROM bronze_pre
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Statement Type Distribution
+
+    Expect BS, IS, CF, EQ, CI, UN — this confirms all statement types are present.
+    """)
+    return
+
+
+@app.cell
+def _(bronze_pre, engine, mo):
+    pre_stmt_dist = mo.sql(
+        f"""
+        SELECT
+            stmt,
+            COUNT(*) as row_count,
+            COUNT(DISTINCT adsh) as filing_count,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct_of_total
+        FROM bronze_pre
+        GROUP BY stmt
+        ORDER BY row_count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Referential Integrity: pre → sub and pre → tag
+    """)
+    return
+
+
+@app.cell
+def _(bronze_pre, bronze_sub, engine, mo):
+    pre_sub_integrity = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_pre_rows,
+            COUNT(CASE WHEN s.adsh IS NOT NULL THEN 1 END) as matched_to_sub,
+            COUNT(CASE WHEN s.adsh IS NULL THEN 1 END) as unmatched_to_sub
+        FROM bronze_pre p
+        LEFT JOIN bronze_sub s ON p.adsh = s.adsh
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(bronze_pre, bronze_tag, engine, mo):
+    pre_tag_integrity = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_pre_rows,
+            COUNT(CASE WHEN t.tag IS NOT NULL THEN 1 END) as matched_to_tag,
+            COUNT(CASE WHEN t.tag IS NULL THEN 1 END) as unmatched_to_tag
+        FROM bronze_pre p
+        LEFT JOIN bronze_tag t ON p.tag = t.tag AND p.version = t.version
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Data Quality Log — bronze_pre
+    """)
+    return
+
+
+@app.cell
+def _(engine, mo):
+    pre_quality_log = mo.sql(
+        f"""
+        SELECT
+            field_name,
+            check_category,
+            check_type,
+            severity,
+            issue_count,
+            total_records,
+            issue_percentage,
+            check_passed,
+            error_details
+        FROM data_quality_log
+        WHERE table_name = 'bronze_pre'
+        ORDER BY severity DESC, issue_count DESC
+        """,
+        engine=engine
+    )
+    return (pre_quality_log,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # EDA of Bronze_num
+
+    num.txt stores one row per XBRL numeric fact: a (company filing, tag, period, duration) tuple.
+    Key columns:
+    - **adsh**: accession number — ties back to bronze_sub
+    - **tag / version**: XBRL concept name and taxonomy version
+    - **ddate**: period end date (YYYYMMDD in source, parsed to DATE)
+    - **qtrs**: duration in quarters (0 = instant/balance-sheet, 1–4 = income/flow)
+    - **uom**: unit of measure (USD, shares, pure, etc.)
+    - **value**: numeric value (NULL when a footnote replaces the number)
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Bronze_num Table Overview
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    bronze_num_summary = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_facts,
+            COUNT(DISTINCT adsh) as unique_filings,
+            COUNT(DISTINCT tag) as unique_tags,
+            COUNT(DISTINCT uom) as unique_uoms,
+            MIN(ddate) as earliest_ddate,
+            MAX(ddate) as latest_ddate,
+            SUM(CASE WHEN value IS NULL THEN 1 ELSE 0 END) as null_value_count,
+            ROUND(100.0 * SUM(CASE WHEN value IS NULL THEN 1 ELSE 0 END) / COUNT(*), 2) as pct_null_value
+        FROM bronze_num
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Verify Date Field (ddate)
+
+    Checks that TRY_STRPTIME correctly parsed all YYYYMMDD strings to DATE.
+    Any NULLs here that were not NULL in the source indicate conversion failures.
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    num_date_check = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_records,
+            COUNT(ddate) as ddate_not_null,
+            COUNT(*) - COUNT(ddate) as ddate_null_count
+        FROM bronze_num
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Qtrs Distribution
+
+    - 0 = instant (balance sheet items like Assets, Liabilities)
+    - 1 = single quarter
+    - 4 = full year (annual income statement items)
+    - Other values are possible for trailing-twelve-month or multi-year periods
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    qtrs_distribution = mo.sql(
+        f"""
+        SELECT
+            qtrs,
+            COUNT(*) as fact_count,
+            COUNT(DISTINCT tag) as unique_tags,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct_of_total
+        FROM bronze_num
+        GROUP BY qtrs
+        ORDER BY qtrs
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Unit of Measure (UOM) Distribution
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    uom_distribution = mo.sql(
+        f"""
+        SELECT
+            uom,
+            COUNT(*) as fact_count,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct_of_total
+        FROM bronze_num
+        GROUP BY uom
+        ORDER BY fact_count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Top Tags by Frequency
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    top_tags = mo.sql(
+        f"""
+        SELECT
+            tag,
+            version,
+            COUNT(*) as fact_count,
+            COUNT(DISTINCT adsh) as filing_count,
+            MIN(value) as min_value,
+            MAX(value) as max_value
+        FROM bronze_num
+        WHERE value IS NOT NULL
+        GROUP BY tag, version
+        ORDER BY fact_count DESC
+        LIMIT 20
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## NULL Value Analysis
+
+    Rows where value IS NULL should have a footnote instead.
+    If both value and footnote are NULL, that is a data quality concern.
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, engine, mo):
+    null_value_analysis = mo.sql(
+        f"""
+        SELECT
+            CASE
+                WHEN value IS NULL AND footnote IS NULL THEN 'both_null'
+                WHEN value IS NULL AND footnote IS NOT NULL THEN 'null_value_with_footnote'
+                WHEN value IS NOT NULL THEN 'has_value'
+            END as value_status,
+            COUNT(*) as count
+        FROM bronze_num
+        GROUP BY value_status
+        ORDER BY count DESC
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Data Quality Log — bronze_num
+    """)
+    return
+
+
+@app.cell
+def _(engine, mo):
+    num_quality_log = mo.sql(
+        f"""
+        SELECT
+            field_name,
+            check_category,
+            check_type,
+            severity,
+            issue_count,
+            total_records,
+            issue_percentage,
+            check_passed,
+            error_details
+        FROM data_quality_log
+        WHERE table_name = 'bronze_num'
+        ORDER BY severity DESC, issue_count DESC
+        """,
+        engine=engine
+    )
+    return (num_quality_log,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Sample Filings — Cross-reference with bronze_sub
+
+    Confirms adsh values in bronze_num exist in bronze_sub (referential integrity check).
+    """)
+    return
+
+
+@app.cell
+def _(bronze_num, bronze_sub, engine, mo):
+    referential_check = mo.sql(
+        f"""
+        SELECT
+            COUNT(*) as total_num_facts,
+            COUNT(CASE WHEN s.adsh IS NOT NULL THEN 1 END) as matched_to_sub,
+            COUNT(CASE WHEN s.adsh IS NULL THEN 1 END) as unmatched_to_sub,
+            ROUND(
+                100.0 * COUNT(CASE WHEN s.adsh IS NULL THEN 1 END) / COUNT(*),
+                2
+            ) as pct_unmatched
+        FROM bronze_num n
+        LEFT JOIN bronze_sub s ON n.adsh = s.adsh
         """,
         engine=engine
     )

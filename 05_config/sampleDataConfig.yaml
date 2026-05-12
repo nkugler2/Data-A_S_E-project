@@ -50,6 +50,9 @@ bronze:
   # Options: "sub.txt", "num.txt", "tag.txt", "pre.txt"
   files_to_load:
     - "sub.txt"
+    - "num.txt"
+    - "tag.txt"
+    - "pre.txt"
 
 # Silver Layer Configuration #
 ## What metrics I want to focus on in my sample pipeline ##

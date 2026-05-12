@@ -359,58 +359,124 @@ class BronzeLoader:
     ##################################################################################################################
 
     def _load_num(self, quarter_path: Path, quarter: str):
-        """Load numeric facts data"""
+        """Load numeric facts data
+
+        1. Reads the num.txt file into a pandas dataframe
+        2. Adds metadata columns to the dataframe
+        3. Creates the bronze_num table if it doesn't exist
+        4. Inserts the dataframe with explicit type conversion (TRY_STRPTIME for ddate, TRY_CAST for qtrs)
+        5. Tracks data quality metrics in the audit table
+
+        Args:
+         self: The class instance
+         quarter_path: The path to the quarter
+         quarter: The quarter to load
+        """
         file_path = quarter_path / "num.txt"
 
         df = pd.read_csv(
             file_path,
             sep="\t",
             encoding="latin-1",
-            dtype={
-                "adsh": str,
-                "tag": str,
-                "version": str,
-                "coreg": str,
-                "ddate": str,
-                "qtrs": str,
-                "uom": str,
-                "value": float,
-                "footnote": str,
-            },
+            dtype=str,  # Read everything as string initially
             low_memory=False,
         )
 
         df["data_quarter"] = quarter
         df["load_timestamp"] = datetime.now()
 
+        total_source_records = len(df)
+        load_timestamp = datetime.now()
+
+        # Track source data quality BEFORE conversion
+        source_null_counts = {}
+        for field in ["adsh", "tag", "version", "coreg", "ddate", "qtrs", "uom", "value", "footnote"]:
+            source_null_counts[field] = int(df[field].isna().sum())
+
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS bronze_num (
-                adsh VARCHAR,
-                tag VARCHAR,
-                version VARCHAR,
+                -- Primary Key Components --
+                adsh VARCHAR NOT NULL,
+                tag VARCHAR NOT NULL,
+                version VARCHAR NOT NULL,
                 coreg VARCHAR,
-                ddate VARCHAR,
-                qtrs VARCHAR,
-                uom VARCHAR,
+
+                -- Period --
+                ddate DATE,
+                qtrs INTEGER,
+
+                -- Measurement --
+                uom VARCHAR NOT NULL,
                 value DOUBLE,
                 footnote VARCHAR,
+
+                -- Metadata --
                 data_quarter VARCHAR,
                 load_timestamp TIMESTAMP
             )
         """)
 
         self.conn.register("num_df", df)
-        self.conn.execute("INSERT INTO bronze_num SELECT * FROM num_df")
+        self.conn.execute("""
+            INSERT INTO bronze_num
+            SELECT
+                adsh,
+                tag,
+                version,
+                coreg,
+                TRY_STRPTIME(ddate, '%Y%m%d')::DATE,
+                TRY_CAST(qtrs AS INTEGER),
+                uom,
+                TRY_CAST(value AS DOUBLE),
+                footnote,
+                data_quarter,
+                TRY_CAST(load_timestamp AS TIMESTAMP)
+            FROM num_df
+        """)
         self.conn.unregister("num_df")
 
-        print(f"  ✓ Loaded {len(df):,} numeric facts from num.txt")
+        # Track data quality
+        quality_checks = [
+            ("null_check", "required_field", "adsh", "CRITICAL"),
+            ("null_check", "required_field", "tag", "CRITICAL"),
+            ("null_check", "required_field", "version", "CRITICAL"),
+            ("null_check", "required_field", "ddate", "CRITICAL"),
+            ("null_check", "required_field", "qtrs", "CRITICAL"),
+            ("null_check", "required_field", "uom", "CRITICAL"),
+            ("null_check", "optional_field", "value", "WARNING"),
+            ("type_conversion", "date_conversion", "ddate", "CRITICAL"),
+            ("type_conversion", "integer_conversion", "qtrs", "CRITICAL"),
+            ("type_conversion", "double_conversion", "value", "WARNING"),
+        ]
+
+        self._log_data_quality(
+            table_name="bronze_num",
+            quarter=quarter,
+            load_timestamp=load_timestamp,
+            quality_checks=quality_checks,
+            total_records=total_source_records,
+            source_null_counts=source_null_counts,
+        )
+        print(f"  ✓ Loaded {total_source_records:,} numeric facts from num.txt")
 
     ##################################################################################################################
     # Step 6: Load tag definitions
     ##################################################################################################################
 
     def _load_tag(self, quarter_path: Path, quarter: str):
-        """Load tag definitions"""
+        """Load tag definitions
+
+        1. Reads the tag.txt file into a pandas dataframe
+        2. Adds metadata columns
+        3. Creates bronze_tag if it doesn't exist
+        4. Inserts with explicit type conversion (TRY_CAST for custom and abstract booleans)
+        5. Tracks data quality metrics
+
+        Args:
+         self: The class instance
+         quarter_path: The path to the quarter
+         quarter: The quarter to load
+        """
         file_path = quarter_path / "tag.txt"
 
         df = pd.read_csv(
@@ -420,34 +486,94 @@ class BronzeLoader:
         df["data_quarter"] = quarter
         df["load_timestamp"] = datetime.now()
 
+        total_source_records = len(df)
+        load_timestamp = datetime.now()
+
+        # Track source data quality BEFORE conversion
+        source_null_counts = {}
+        for field in ["tag", "version", "custom", "abstract", "datatype", "iord", "crdr", "tlabel", "doc"]:
+            source_null_counts[field] = int(df[field].isna().sum())
+
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS bronze_tag (
-                tag VARCHAR,
-                version VARCHAR,
-                custom VARCHAR,
-                abstract VARCHAR,
+                -- Primary Key Components --
+                tag VARCHAR NOT NULL,
+                version VARCHAR NOT NULL,
+
+                -- Tag Classification --
+                custom BOOLEAN,
+                abstract BOOLEAN,
                 datatype VARCHAR,
                 iord VARCHAR,
                 crdr VARCHAR,
+
+                -- Human-readable --
                 tlabel VARCHAR,
                 doc VARCHAR,
+
+                -- Metadata --
                 data_quarter VARCHAR,
                 load_timestamp TIMESTAMP
             )
         """)
 
         self.conn.register("tag_df", df)
-        self.conn.execute("INSERT INTO bronze_tag SELECT * FROM tag_df")
+        self.conn.execute("""
+            INSERT INTO bronze_tag
+            SELECT
+                tag,
+                version,
+                TRY_CAST(custom AS BOOLEAN),
+                TRY_CAST(abstract AS BOOLEAN),
+                datatype,
+                iord,
+                crdr,
+                tlabel,
+                doc,
+                data_quarter,
+                TRY_CAST(load_timestamp AS TIMESTAMP)
+            FROM tag_df
+        """)
         self.conn.unregister("tag_df")
 
-        print(f"  ✓ Loaded {len(df):,} tag definitions from tag.txt")
+        # Track data quality
+        quality_checks = [
+            ("null_check", "required_field", "tag", "CRITICAL"),
+            ("null_check", "required_field", "version", "CRITICAL"),
+            ("null_check", "optional_field", "datatype", "WARNING"),
+            ("null_check", "optional_field", "iord", "WARNING"),
+            ("type_conversion", "boolean_conversion", "custom", "WARNING"),
+            ("type_conversion", "boolean_conversion", "abstract", "WARNING"),
+        ]
+
+        self._log_data_quality(
+            table_name="bronze_tag",
+            quarter=quarter,
+            load_timestamp=load_timestamp,
+            quality_checks=quality_checks,
+            total_records=total_source_records,
+            source_null_counts=source_null_counts,
+        )
+        print(f"  ✓ Loaded {total_source_records:,} tag definitions from tag.txt")
 
     ##################################################################################################################
     # Step 7: Load presentation data
     ##################################################################################################################
 
     def _load_pre(self, quarter_path: Path, quarter: str):
-        """Load presentation data"""
+        """Load presentation data
+
+        1. Reads the pre.txt file into a pandas dataframe
+        2. Adds metadata columns
+        3. Creates bronze_pre if it doesn't exist
+        4. Inserts with explicit type conversion (report/line to INTEGER, inpth/negating to BOOLEAN)
+        5. Tracks data quality metrics
+
+        Args:
+         self: The class instance
+         quarter_path: The path to the quarter
+         quarter: The quarter to load
+        """
         file_path = quarter_path / "pre.txt"
 
         df = pd.read_csv(
@@ -457,28 +583,84 @@ class BronzeLoader:
         df["data_quarter"] = quarter
         df["load_timestamp"] = datetime.now()
 
+        total_source_records = len(df)
+        load_timestamp = datetime.now()
+
+        # Track source data quality BEFORE conversion
+        source_null_counts = {}
+        for field in ["adsh", "report", "line", "stmt", "inpth", "rfile", "tag", "version", "plabel", "negating"]:
+            source_null_counts[field] = int(df[field].isna().sum())
+
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS bronze_pre (
-                adsh VARCHAR,
-                report VARCHAR,
-                line VARCHAR,
+                -- Primary Key Components --
+                adsh VARCHAR NOT NULL,
+                report INTEGER NOT NULL,
+                line INTEGER NOT NULL,
+
+                -- Statement Classification --
                 stmt VARCHAR,
-                inpth VARCHAR,
+                inpth BOOLEAN,
                 rfile VARCHAR,
-                tag VARCHAR,
-                version VARCHAR,
+
+                -- Tag Reference --
+                tag VARCHAR NOT NULL,
+                version VARCHAR NOT NULL,
+
+                -- Display --
                 plabel VARCHAR,
-                negating VARCHAR,
+                negating BOOLEAN,
+
+                -- Metadata --
                 data_quarter VARCHAR,
                 load_timestamp TIMESTAMP
             )
         """)
 
         self.conn.register("pre_df", df)
-        self.conn.execute("INSERT INTO bronze_pre SELECT * FROM pre_df")
+        self.conn.execute("""
+            INSERT INTO bronze_pre
+            SELECT
+                adsh,
+                TRY_CAST(report AS INTEGER),
+                TRY_CAST(line AS INTEGER),
+                stmt,
+                TRY_CAST(inpth AS BOOLEAN),
+                rfile,
+                tag,
+                version,
+                plabel,
+                TRY_CAST(negating AS BOOLEAN),
+                data_quarter,
+                TRY_CAST(load_timestamp AS TIMESTAMP)
+            FROM pre_df
+        """)
         self.conn.unregister("pre_df")
 
-        print(f"  ✓ Loaded {len(df):,} presentation rows from pre.txt")
+        # Track data quality
+        quality_checks = [
+            ("null_check", "required_field", "adsh", "CRITICAL"),
+            ("null_check", "required_field", "report", "CRITICAL"),
+            ("null_check", "required_field", "line", "CRITICAL"),
+            ("null_check", "required_field", "tag", "CRITICAL"),
+            ("null_check", "required_field", "version", "CRITICAL"),
+            ("null_check", "optional_field", "stmt", "WARNING"),
+            ("null_check", "optional_field", "inpth", "WARNING"),
+            ("type_conversion", "integer_conversion", "report", "CRITICAL"),
+            ("type_conversion", "integer_conversion", "line", "CRITICAL"),
+            ("type_conversion", "boolean_conversion", "inpth", "WARNING"),
+            ("type_conversion", "boolean_conversion", "negating", "WARNING"),
+        ]
+
+        self._log_data_quality(
+            table_name="bronze_pre",
+            quarter=quarter,
+            load_timestamp=load_timestamp,
+            quality_checks=quality_checks,
+            total_records=total_source_records,
+            source_null_counts=source_null_counts,
+        )
+        print(f"  ✓ Loaded {total_source_records:,} presentation rows from pre.txt")
 
     ##################################################################################################################
     # Step 8: Log Data Quality Metrics
@@ -631,10 +813,10 @@ class BronzeLoader:
         # Key indexes for joins
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sub_adsh ON bronze_sub(adsh)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sub_cik ON bronze_sub(cik)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_adsh ON bronze_num(adsh)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_tag ON bronze_num(tag)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_adsh ON bronze_pre(adsh)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_stmt ON bronze_pre(stmt)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_adsh ON bronze_num(adsh)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_num_tag ON bronze_num(tag)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_adsh ON bronze_pre(adsh)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pre_stmt ON bronze_pre(stmt)")
 
         print("✓ Indexes created")
 
@@ -650,17 +832,16 @@ class BronzeLoader:
         ).fetchone()
         stats["companies"] = result[0] if result else 0
 
-        # stats["numeric_facts"] = self.conn.execute(
-        #     "SELECT COUNT(*) FROM bronze_num"
-        # ).fetchone()[0]
+        result = self.conn.execute("SELECT COUNT(*) FROM bronze_num").fetchone()
+        stats["numeric_facts"] = result[0] if result else 0
 
-        # stats["unique_tags"] = self.conn.execute(
-        #     "SELECT COUNT(DISTINCT tag) FROM bronze_num"
-        # ).fetchone()[0]
+        result = self.conn.execute(
+            "SELECT COUNT(DISTINCT tag) FROM bronze_num"
+        ).fetchone()
+        stats["unique_tags"] = result[0] if result else 0
 
-        # stats["presentation_rows"] = self.conn.execute(
-        #     "SELECT COUNT(*) FROM bronze_pre"
-        # ).fetchone()[0]
+        result = self.conn.execute("SELECT COUNT(*) FROM bronze_pre").fetchone()
+        stats["presentation_rows"] = result[0] if result else 0
 
         return stats
 
@@ -689,9 +870,9 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"Submissions:      {stats['submissions']:,}")
     print(f"Unique Companies: {stats['companies']:,}")
-    # print(f"Numeric Facts:    {stats['numeric_facts']:,}")
-    # print(f"Unique Tags:      {stats['unique_tags']:,}")
-    # print(f"Presentation Rows: {stats['presentation_rows']:,}")
+    print(f"Numeric Facts:    {stats['numeric_facts']:,}")
+    print(f"Unique Tags:      {stats['unique_tags']:,}")
+    print(f"Presentation Rows: {stats['presentation_rows']:,}")
     print("=" * 50)
 
     loader.close()
