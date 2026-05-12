@@ -203,13 +203,13 @@ class BronzeLoader:
             CREATE TABLE IF NOT EXISTS bronze_sub (
                 -- Primary Identifier --
                 adsh VARCHAR(20) NOT NULL,
-                
+
                 -- Company Identifier --
                 cik INTEGER NOT NULL,
                 name VARCHAR(150) NOT NULL,
                 sic INTEGER,
 
-                -- Business Address fields --                
+                -- Business Address fields --
                 countryba VARCHAR(2),
                 stprba VARCHAR(2),
                 cityba VARCHAR(30),
@@ -246,7 +246,7 @@ class BronzeLoader:
                 fy INTEGER,
                 fp VARCHAR(2),
 
-                -- Filing Dates -- 
+                -- Filing Dates --
                 filed DATE,
                 accepted TIMESTAMP NOT NULL,
 
@@ -271,7 +271,7 @@ class BronzeLoader:
         ## TRY_CAST us used only on columns that are not strings ##
         self.conn.execute("""
             INSERT INTO bronze_sub
-            SELECT 
+            SELECT
                 adsh,
                 TRY_CAST(cik AS INTEGER),
                 name,
@@ -308,7 +308,7 @@ class BronzeLoader:
                 instance,
                 TRY_CAST(nciks AS INTEGER),
                 aciks,
-                
+
                 -- Metadata --
                 data_quarter,
                 TRY_CAST(load_timestamp AS TIMESTAMP)
@@ -856,12 +856,13 @@ if __name__ == "__main__":
     config_yaml_path = config_path.with_suffix(".yaml")
     config = Config(str(config_yaml_path))
     loader = BronzeLoader(config)
-    # Create indexes
-    # loader.create_indexes()
 
     # Load all configured quarters
     for quarter in config.quarters:
         loader.load_quarter(quarter)
+
+    # Create indexes after tables are populated
+    loader.create_indexes()
 
     # Print summary
     stats = loader.get_summary_stats()
