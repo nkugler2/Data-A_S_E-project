@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "duckdb": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-motherduck",
+        "--db-path",
+        "01_data/01_sampleData/02_bronze/secSampleData_bronze.duckdb"
+      ]
+    }
+  }
+}

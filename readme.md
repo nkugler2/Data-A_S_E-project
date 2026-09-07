@@ -17,3 +17,7 @@ I would like to:
 9. Create models that can understand or predict financial performance
 10. (Stretch) Possibly integrate outside data to augment the SEC data
 11. (Stretch) Possibly use sentiment analysis of news reports and combine that with financial data to understand/predict financial performance.
+
+---
+
+Project notes and devlog: [notes/HOME.md](notes/HOME.md)

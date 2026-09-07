@@ -57,6 +57,17 @@ def _(bronze_num, engine, mo):
 
 
 @app.cell
+def _(bronze_num, engine, mo):
+    _df = mo.sql(
+        f"""
+        select count(*) as "Total Count of Num Rows" from bronze_num
+        """,
+        engine=engine
+    )
+    return
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     ## Data_quality_log
@@ -509,7 +520,7 @@ def _(mo):
 
 
 @app.cell
-def _(engine, mo):
+def _(data_quality_log, engine, mo):
     tag_quality_log = mo.sql(
         f"""
         SELECT
@@ -528,7 +539,7 @@ def _(engine, mo):
         """,
         engine=engine
     )
-    return (tag_quality_log,)
+    return
 
 
 @app.cell
@@ -654,7 +665,7 @@ def _(mo):
 
 
 @app.cell
-def _(engine, mo):
+def _(data_quality_log, engine, mo):
     pre_quality_log = mo.sql(
         f"""
         SELECT
@@ -673,7 +684,7 @@ def _(engine, mo):
         """,
         engine=engine
     )
-    return (pre_quality_log,)
+    return
 
 
 @app.cell
@@ -873,7 +884,7 @@ def _(mo):
 
 
 @app.cell
-def _(engine, mo):
+def _(data_quality_log, engine, mo):
     num_quality_log = mo.sql(
         f"""
         SELECT
@@ -892,7 +903,7 @@ def _(engine, mo):
         """,
         engine=engine
     )
-    return (num_quality_log,)
+    return
 
 
 @app.cell
