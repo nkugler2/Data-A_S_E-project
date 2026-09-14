@@ -16,7 +16,7 @@ hunting for it.
 **Absolute, on this machine:**
 
 ```text
-/Users/noahkugler/Documents/code/Data-A-S-E/01_data/01_sampleData/02_bronze/secSampleData_bronze.duckdb
+/Users/noahkugler/Developer/code/Data-A-S-E/01_data/01_sampleData/02_bronze/secSampleData_bronze.duckdb
 ```
 
 ## Connecting
